@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fastmeals
+      POSTGRES_PASSWORD: fastmeals123
+      POSTGRES_DB: fastmeals
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fastmeals -d fastmeals"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://fastmeals:fastmeals123@db:5432/fastmeals
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-de-acesso-em-producao}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-troque-esta-chave-de-refresh-em-producao}
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      PORT: 3001
+      LOG_LEVEL: info
+      CORS_ORIGIN: http://localhost:3000
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "false"
+      RATE_LIMIT_MAX: 100
+      BUSINESS_TIMEZONE: America/Sao_Paulo
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db-data:
